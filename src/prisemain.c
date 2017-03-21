@@ -1,23 +1,27 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<math.h>
-
-#include "../lib/def.h"
-#include "../lib/nrio.h"
-#include "../lib/nrarith.h"
-#include "../lib/nralloc.h"
-
+#include "lib.h"
 #define ELT_X 3
 #define ELT_Y 3
-#define NB_IMAGES 965
-int main(int argc, char const *argv[]) {
+#define NB_IMAGES 900
 
-  //save_nivgris();
-  //detect_mvt(40);
-  mean_temp();
+int main(int argc, char const *argv[]) {
+  long nrl, nrh, ncl, nch;
+  int i;
+
+  byte **src = LoadPGM_bmatrix("../res/results/detection/mean_temp.pgm", &nrl, &nrh, &ncl, &nch);
+  byte **dest = bmatrix(nrl, nrh, ncl, nch);
+  /*float filterr[3][3] = {{1, 1, 1},
+                         {1, 1, 1},
+                         {1, 1, 1}};*/
+
+  float** filterr = malloc(3*sizeof(float*));
+  for(i = 0; i < 3; i++){
+    filterr[i] = calloc(3, sizeof(float));
+  }
+
+  convolution(src, dest, filterr, 3, 3, nrl, nrh, ncl, nch);
   return 0;
 }
-
+/*
 void prisemain() {
   long nrh,nrl,nch,ncl;
   byte **R, **R2;
@@ -86,48 +90,52 @@ void detect_mvt(int seuil) {
   }
 }
 
-/*void mean_temp() {
-  int nb_of_images = 100;
-  int i, j, k;
-  long nrl, nrh, ncl, nch;
-  rgb8 **cur = LoadPPM_rgb8matrix("../res/Sequences/Fomd/ppm/fomd001.ppm", &nrl, &nrh, &ncl, &nch);
-  long sum_r[ncl][nch];
-  long sum_g[ncl][nch];
-  long sum_b[ncl][nch];
-  //memset( sum_r, 0, ncl*nch*sizeof(int) );
-  //memset( sum_g, 0, ncl*nch*sizeof(int) );
-  //memset( sum_b, 0, ncl*nch*sizeof(int) );
-  my_zero_matrix(sum_r, ncl, nch);
-  my_zero_matrix(sum_g, ncl, nch);
-  my_zero_matrix(sum_b, ncl, nch);
-  rgb8 **mean = rgb8matrix(nrl, nrh, ncl, nch);
-  char *img_prefix = "../res/Sequences/Fomd/ppm/fomd";
-  char *img_suffix = ".ppm";
-  char img_path[50];
+void detect_mvt_ref(int seuil, int seuil_binarisation) {
 
-  for(i=0; i<nb_of_images; i++) {
-    sprintf(img_path, "%s%.3d%s", img_prefix, i+1, img_suffix);
-    cur = LoadPPM_rgb8matrix(img_path, &nrl, &nrh, &ncl, &nch);
-    for(j = 0; j<nrh; j++) {
-      for(k = 0; k<nch; k++) {
-        sum_r[j][k] += cur[j][k].r;
-        sum_g[j][k] += cur[j][k].g;
-        sum_b[j][k] += cur[j][k].b;
-        //mean[j][k] += (byte)((float)cur[j][k] / (float) nb_of_images);
+  long nrl, nrh, ncl, nch;
+
+  int i, j, k;
+
+  char *img_prefix = "../res/Sequences/Fomd/pgm/fomd";
+  char *save_prefix = "../res/results/detection/mvt_ref/fomd";
+  char *img_suffix = ".pgm";
+  char img_path[50];
+  char save_path[50];
+
+  mean_temp();
+
+  rgb8 **ref = LoadPPM_rgb8matrix("../res/results/detection/mean_temp.ppm", &nrl, &nrh, &ncl, &nch);
+  byte **ref_grey = bmatrix(nrl, nrh, ncl, nch);
+  byte **ref_bin = bmatrix(nrl, nrh, ncl, nch);
+  byte **res = bmatrix(nrl, nrh, ncl, nch);
+  byte **cur = bmatrix(nrl, nrh, ncl, nch);
+
+  get_nivgris(ref, ref_grey, nrl, nrh, ncl, nch);
+  get_seuillee(ref_grey, ref_bin, seuil_binarisation, nrl, nrh, ncl, nch);
+
+  char *cur_path[50];
+
+  for(i=1; i<NB_IMAGES; i++) {
+    sprintf(cur_path, "%s%.3d%s", img_prefix, i, img_suffix);
+    printf("L:%s\n", cur_path);
+    cur = LoadPGM_bmatrix(cur_path, &nrl, &nrh, &ncl, &nch);
+
+    for(j=0; j<nrh; j++) {
+      for(k=0; k<nch; k++) {
+
+        if(abs(cur[j][k] - ref_bin[j][k]) <= seuil) {
+          res[j][k] = 255;
+        } else {
+          res[j][k] = 0;
+        }
+
       }
     }
+    sprintf(save_path, "%s%.3d%s", save_prefix, i, img_suffix);
+    printf("S:%s\n", save_path);
+    SavePGM_bmatrix(res, nrl, nrh, ncl, nch, save_path);
   }
-
-  for(j = 0; j<nrh; j++) {
-    for(k = 0; k<nch; k++) {
-      mean[j][k].r = sum_r[j][k] / nb_of_images;
-      mean[j][k].g = sum_g[j][k] / nb_of_images;
-      mean[j][k].b = sum_b[j][k] / nb_of_images;
-    }
-  }
-  SavePPM_rgb8matrix(mean, nrl, nrh, ncl, nch, "../res/results/detection/mean_temp.ppm");
-  free_rgb8matrix(cur, nrl, nrh, ncl, nch);
-}*/
+}
 
 void mean_temp() {
 
@@ -176,6 +184,7 @@ void mean_temp() {
 void mean_med() {
   //TODO
 }
+
 //TODO: struct for structuring element
 void erode(byte **from, byte **to, long nrl, long nrh, long ncl, long nch) {
   int i, j;
@@ -252,31 +261,4 @@ void get_seuillee(rgb8 **from, byte **to, int seuil, long nrl, long nrh, long nc
     }
   }
 }
-void set_elt(int elt[ELT_X][ELT_Y], int to) {
-  int i, j;
-
-  for(i=0; i<ELT_X; i++) {
-    for(j=0; j<ELT_Y; j++) {
-      elt[i][j] = to;
-    }
-  }
-}
-
-void print_elt(int elt[ELT_X][ELT_Y]) {
-  int i, j;
-  for(i=0; i<ELT_X; i++) {
-    for(j=0; j<ELT_Y; j++) {
-      printf("%d ", elt[i][j]);
-    }
-    printf("\n");
-  }
-}
-
-void my_zero_matrix(long **matrix, long x, long y) {
-  int i, j;
-  for(i=0; i<x; i++) {
-    for(j=0; j<y; j++) {
-      matrix[i][j] = 0;
-    }
-  }
-}
+*/
